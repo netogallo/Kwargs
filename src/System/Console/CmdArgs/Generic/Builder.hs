@@ -15,7 +15,8 @@ data BaseBuilder a = BaseBuilder{
   assignments :: M.Map String String,
   builderFormat :: [KwargFormat a],
   baseBuilder :: [String] -> Either String a
-  } | Alt (BaseBuilder a) (BaseBuilder a)
+  }
+  | Alt (BaseBuilder a) (BaseBuilder a)
 
 data Kwarg a = Kwarg{
 
@@ -31,15 +32,6 @@ data KwargsConfig = KwargsConfig {
   
   }
 
--- kwargComp f ka kb = {
-
---   builder = BaseBuilder{
-     
-
---                        }
-  
---   }
-
 data Kwargs a = Kwargs{
 
   kwargs :: [Kwarg a]
@@ -54,25 +46,26 @@ defaultConfig = KwargsConfig{
                 
 -- |
 getBuilders :: forall a x . (Generic a, GKwargsDataParser (Rep a x) StartFlag) => BaseBuilder a
-getBuilders = foldl (\s f -> Alt s (build f)) (build fmt) fmts
+getBuilders = foldl (\s f -> Alt s (build f)) (build reader) readers
 
     where
       rep :: Rep a x
       rep = from (undefined :: a)
-      fmt:fmts = dataFormat rep (undefined :: StartFlag)
-      dataBuilder strs = liftM to $ readData rep (undefined :: StartFlag) strs
-      build f = BaseBuilder{
+      reader:readers = readData rep (undefined :: StartFlag)
+      dataBuilder strs = liftM to $  strs
+      build (f,r) = BaseBuilder{
         assignments = M.empty,
         builderFormat = map kwargFormatConv f,
-        baseBuilder = dataBuilder
+        baseBuilder = \strs -> liftM to $ r strs 
         }
 
-createFlag f = case f of
-  Mandatory name -> argArg name
-  Optional name  -> argArg name
-  Flag name -> flagArg name
+createFlag f = case kwargType f of
+  Mandatory -> argArg name
+  Optional  -> argArg name
+  Flag -> flagArg name
 
   where
+    name = constrName f
     ins k v m = Right $ M.insert k v m
     argArg name = C.flagReq [name] (ins name) name ""
     flagArg name = C.flagOpt "True" [name] (ins name) name ""
@@ -113,3 +106,4 @@ processKwargs cfg Kwargs{..} args = case rights results of
     process kwarg = kwargProcessor cfg kwarg args
     results = map process kwargs
     errs = lefts results
+

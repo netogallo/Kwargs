@@ -12,22 +12,25 @@ import Control.Applicative
 
 data KwargParser a
 
-data KwargFormat a = Mandatory String | Optional String | Flag String deriving Show
+data KwargType = Mandatory | Optional | Flag deriving Show
 
-kwargFormatConv x = case x of
-  Mandatory str -> Mandatory str
-  Optional str -> Optional str
-  Flag str -> Flag str
+data KwargFormat a = KwargFormat{
+
+  constrName :: String,
+  kwargType :: KwargType
+}
+
+kwargFormatConv x = KwargFormat{
+  constrName = constrName x,
+  kwargType = kwargType x
+  }
 
 isRequired f =
-  case f of
-    Mandatory _ -> True
+  case kwargType f of
+    Mandatory -> True
     _ -> False
 
-getName a = case a of
-  Mandatory s -> s
-  Optional s -> s
-  Flag s -> s
+getName = constrName
 
 class KwargsRead a where
 
@@ -37,7 +40,10 @@ class KwargsRead a where
 
   kwargFormat :: KwargFormat a
   default kwargFormat :: KwargFormat a
-  kwargFormat = Mandatory ""
+  kwargFormat = KwargFormat{
+    kwargType = Mandatory,
+    constrName = ""
+    }
   
 instance KwargsRead Int 
 instance KwargsRead String
@@ -48,7 +54,10 @@ instance KwargsRead x => KwargsRead (Maybe x) where
     case str of
       "" -> Right Nothing
       _ -> readKwarg str >>= Right . Just
-  kwargFormat = Optional ""
+  kwargFormat = KwargFormat{
+    constrName = "",
+    kwargType = Optional
+    }
 
 data OptionalFlag
 data RequiredFlag
@@ -63,8 +72,7 @@ data StartFlag
 
 class GKwargsDataParser a flag where
 
-  readData :: a -> flag -> [String] -> Either String a
-  dataFormat :: a -> flag -> [[KwargFormat a]]
+  readData :: a -> flag -> [([KwargFormat a],[String] -> Either String a)]
 
 instance (KwargsRead a) => GKwargsParser (K1 i a m) where
 
@@ -88,22 +96,22 @@ instance (GKwargsParser (f p), Selector c) => GKwargsParser (M1 S c f p) where
   format = map (addNames (selName constr)) (format :: [KwargFormat (f p)])
 
     where
-      addNames s x = case x of
-        Mandatory _ -> Mandatory s
-        Optional _ -> Optional s
-        Flag _ -> Flag s
+      addNames s x = KwargFormat{
+        constrName = s,
+        kwargType = kwargType x
+        }
+      
       constr = undefined :: M1 S c f p 
 
 instance (GKwargsDataParser (f p) ConstrFlag) => (GKwargsDataParser (M1 i c f p)) StartFlag where
 
-  readData _ _ xs = readData undefined (undefined :: ConstrFlag) xs >>= Right . M1
-  dataFormat _ _ = map (map kwargFormatConv)
-                 (dataFormat undefined (undefined :: ConstrFlag)  :: [[KwargFormat (f p)]])
+  readData _ _ = map (\(f,conv) -> (map kwargFormatConv f, \xs -> conv xs >>= Right . M1))
+                 (readData undefined (undefined :: ConstrFlag))
 
 instance GKwargsParser (f p) => (GKwargsDataParser (M1 i c f p)) ConstrFlag where
 
-  readData _ _ xs = readVal xs >>= Right . M1
-  dataFormat _ _ = [map kwargFormatConv (format :: [KwargFormat (f p)])]
-  
+  readData _ _ = [(map kwargFormatConv (format :: [KwargFormat (f p)]),
+                      \xs -> readVal xs >>= Right . M1)]
+
 kwargParser :: forall a. Generic a => KwargParser a
 kwargParser = undefined
