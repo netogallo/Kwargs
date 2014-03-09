@@ -88,6 +88,26 @@ formatProcess vals f = case M.lookup (getName f) vals of
   Nothing -> Right ""
 
 -- | Function that given a value builder and argumetns, attempts to build the value
+
+kwargProcessor :: KwargsConfig -> Kwarg t -> [String] -> Either String t
+kwargProcessor cfg Kwarg{builder=Alt ba bb,flags=fs} vals = 
+  let
+    res1 = baseBuilderA vals
+    res2 = baseBuilderB vals
+  in case (res1, res2) of
+    (Right r,_) -> Right r -- Maybe throw an error if both are right
+                          -- although it will be slower
+    (Left _,Right r) -> Right r
+    (Left e1, Left e2) -> Left $ e1 ++ e2
+
+  where
+    baseBuilderGen builder = kwargProcessor cfg Kwarg{
+      builder=builder,
+      flags=fs
+      }
+    baseBuilderA = baseBuilderGen ba
+    baseBuilderB = baseBuilderGen bb
+    
 kwargProcessor cfg Kwarg{..} vals = do
   cmdArgs <- C.process mode vals
   buildArgs <- mapM (formatProcess cmdArgs) $ builderFormat builder
@@ -95,7 +115,7 @@ kwargProcessor cfg Kwarg{..} vals = do
 
   where
     mode = defaultMode cfg flags
-      
+
 -- | Function that given a processor for argumetns will
 -- and a list of arguments will atempt to build the value
 -- for the given processor out of the provided arguments 

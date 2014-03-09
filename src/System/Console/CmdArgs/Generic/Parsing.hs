@@ -9,6 +9,8 @@ module System.Console.CmdArgs.Generic.Parsing where
 
 import GHC.Generics
 import Control.Applicative
+import System.IO.Unsafe (unsafePerformIO)
+import Control.Exception (SomeException, try)
 
 data KwargParser a
 
@@ -45,7 +47,8 @@ class KwargsRead a where
     constrName = ""
     }
   
-instance KwargsRead Int 
+instance KwargsRead Int
+
 instance KwargsRead String
 
 instance KwargsRead x => KwargsRead (Maybe x) where
