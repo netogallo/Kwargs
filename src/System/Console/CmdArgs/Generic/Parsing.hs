@@ -4,25 +4,34 @@
              FlexibleContexts,
              FlexibleInstances,
              OverlappingInstances,
-             MultiParamTypeClasses #-}
+             MultiParamTypeClasses,
+             GADTs #-}
 module System.Console.CmdArgs.Generic.Parsing where
 
 import GHC.Generics
 import Control.Applicative
 import System.IO.Unsafe (unsafePerformIO)
 import Control.Exception (SomeException, try)
+import Safe (readMay)
+import Data.Maybe (isJust)
+import Unsafe.Coerce (unsafeCoerce)
+import Data.List (elemIndex)
+import Debug.Trace (trace)
 
 data KwargParser a
 
 data KwargType = Mandatory | Optional | Flag deriving Show
 
-data KwargFormat a = KwargFormat{
+data KwargFormat a where
+  KwargFormat :: {
+    constrName :: String,
+    kwargType :: KwargType
+    } -> KwargFormat a
+  Comp :: KwargFormat a ->  KwargFormat b -> KwargFormat (a,b)
 
-  constrName :: String,
-  kwargType :: KwargType
-}
+kwargFormatConv (Comp a b) = unsafeCoerce $ Comp (unsafeCoerce kwargFormatConv a) (unsafeCoerce kwargFormatConv b)
 
-kwargFormatConv x = KwargFormat{
+kwargFormatConv x@(KwargFormat _ _) = KwargFormat{
   constrName = constrName x,
   kwargType = kwargType x
   }
@@ -38,7 +47,13 @@ class KwargsRead a where
 
   readKwarg :: String -> Either String a
   default readKwarg :: Read a => String -> Either String a
-  readKwarg x = Right $ read x
+  readKwarg x =
+    case filter isJust opts of
+      Just v:_ -> Right v
+      _ -> Left $ "Could not parse: " ++ x
+    where
+      opts = [readMay x, readMay $ "\"" ++ x ++ "\""]
+
 
   kwargFormat :: KwargFormat a
   default kwargFormat :: KwargFormat a
@@ -85,6 +100,14 @@ instance (KwargsRead a) => GKwargsParser (K1 i a m) where
       Right v -> Right (K1 v)
   format =  [kwargFormatConv (kwargFormat :: KwargFormat a)]
 
+instance (KwargsRead a, KwargsRead b) => GKwargsParser (K1 i (a,b) m) where
+  readVal (v:w:_) =
+    case (readKwarg v, readKwarg $ trace (show $ v:w:[]) w) of
+      (Right x, Right y) -> Right $ K1 (x,y)
+      (Left e1, Left e2) -> Left (e1 ++ e2)
+  format = [kwargFormatConv $ Comp (kwargFormat :: KwargFormat a) (kwargFormat :: KwargFormat b)]
+            
+
 instance (GKwargsParser (f x), Selector s, GKwargsParser (g x))
          => GKwargsParser (((M1 S s f) :*: g) x) where
 
@@ -92,17 +115,26 @@ instance (GKwargsParser (f x), Selector s, GKwargsParser (g x))
   format = map kwargFormatConv (format :: [KwargFormat (M1 S s f x)])
            ++ map kwargFormatConv (format :: [KwargFormat (g x)])
 
+
 instance (GKwargsParser (f p), Selector c) => GKwargsParser (M1 S c f p) where
 
   readVal xs = readVal xs >>= Right . M1
 
-  format = map (addNames (selName constr)) (format :: [KwargFormat (f p)])
+  format = concatMap (addNames (selName constr)) (format :: [KwargFormat (f p)])
 
     where
-      addNames s x = KwargFormat{
+      addNames s x@(KwargFormat _ _) = KwargFormat{
         constrName = s,
         kwargType = kwargType x
-        }
+        } : []
+      -- addNames _ _ = error "Joder, esta pizada"
+      addNames s (Comp a b) =
+        case elemIndex '_' s >>= Just . flip splitAt s of
+          Nothing ->
+            unsafeCoerce $ Comp (unsafeCoerce addNames s a) (unsafeCoerce addNames s b)
+          Just (s1,s2) ->
+            (unsafeCoerce addNames (trace (show (s1,tail s2)) s1) a)
+            ++ (unsafeCoerce addNames (tail s2) b)
       
       constr = undefined :: M1 S c f p 
 

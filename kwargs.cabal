@@ -16,12 +16,14 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     System.Console.CmdArgs.Generic.Builder,
+  exposed-modules:     System.Console.CmdArgs.Generic,
+                       System.Console.CmdArgs.Generic.Builder,
                        System.Console.CmdArgs.Generic.Parsing     
   -- other-modules:       
   other-extensions:    DeriveGeneric
-  build-depends:       base >=4.6 && <4.7,
+  build-depends:       base >=4.6 && <4.8,
                        cmdargs >= 0.10.0,
-                       containers >= 0.5 
+                       containers >= 0.5,
+                       safe == 0.3.*
   hs-source-dirs:      src      
   default-language:    Haskell2010

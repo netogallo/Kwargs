@@ -1,4 +1,4 @@
-{-# Language ScopedTypeVariables, DefaultSignatures, FlexibleContexts, RecordWildCards #-}
+{-# Language ScopedTypeVariables, DefaultSignatures, FlexibleContexts, RecordWildCards, AllowAmbiguousTypes, GADTs #-}
 module System.Console.CmdArgs.Generic.Builder where
 
 import System.Console.CmdArgs.Generic.Parsing
@@ -10,6 +10,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import System.Environment (getProgName)
 import Data.Either (rights, lefts)
 import Data.Maybe (fromMaybe)
+import Unsafe.Coerce (unsafeCoerce)
 
 data BaseBuilder a = BaseBuilder{
   assignments :: M.Map String String,
@@ -59,11 +60,17 @@ getBuilders = foldl (\s f -> Alt s (build f)) (build reader) readers
         baseBuilder = \strs -> liftM to $ r strs 
         }
 
-createFlag f = case kwargType f of
-  Mandatory -> argArg name
-  Optional  -> argArg name
-  Flag -> flagArg name
 
+createFlag (Comp a b) = a1 ++ b1
+  where
+    a1 = unsafeCoerce createFlag a
+    b1 = unsafeCoerce createFlag b
+
+createFlag f@(KwargFormat _ _) =
+  case kwargType f of
+    Mandatory -> [argArg name]
+    Optional  -> [argArg name]
+    Flag -> [flagArg name]
   where
     name = constrName f
     ins k v m = Right $ M.insert k v m
@@ -76,16 +83,20 @@ kwargsBuilder bb = Kwarg{
   }
 
   where
-    flags = map createFlag (builderFormat bb)
+    flags = concatMap createFlag (builderFormat bb)
 
 defaultMode KwargsConfig{..} = C.mode "explicit" M.empty programName baseFlag
   where
     baseFlag = C.flagArg (const Right) $ fromMaybe "" helpText
 
-formatProcess vals f = case M.lookup (getName f) vals of
+formatProcess vals f@(KwargFormat _ _) = case M.lookup (constrName f) vals of
   Just arg -> Right arg
   Nothing | isRequired f -> Left $ "Required argument " ++ (getName f) ++ " not found."
   Nothing -> Right ""
+formatProcess vals (Comp a b) =
+  case rights [unsafeCoerce formatProcess vals a, unsafeCoerce formatProcess vals b] of
+    [] -> Left "Todo: error message"
+    v:_ -> Right v
 
 -- | Function that given a value builder and argumetns, attempts to build the value
 
