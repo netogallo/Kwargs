@@ -91,7 +91,7 @@ defaultMode KwargsConfig{..} = C.mode "explicit" M.empty programName baseFlag
 
 formatProcess vals f@(KwargFormat _ _) = case M.lookup (constrName f) vals of
   Just arg -> Right arg
-  Nothing | isRequired f -> Left $ "Required argument " ++ (getName f) ++ " not found."
+  Nothing | isRequired f -> Left $ "Required argument " ++ (constrName f) ++ " not found."
   Nothing -> Right ""
 formatProcess vals (Comp a b) =
   case rights [unsafeCoerce formatProcess vals a, unsafeCoerce formatProcess vals b] of
