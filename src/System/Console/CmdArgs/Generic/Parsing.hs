@@ -36,6 +36,10 @@ kwargFormatConv x@(KwargFormat _ _) = KwargFormat{
   kwargType = kwargType x
   }
 
+mkOpt :: KwargFormat x -> KwargFormat x
+mkOpt (Comp a b) = Comp (mkOpt a) (mkOpt b)
+mkOpt k = k{kwargType=Optional}
+
 isRequired f =
   case kwargType f of
     Mandatory -> True
@@ -52,7 +56,7 @@ class KwargsRead a where
       Just v:_ -> Right v
       _ -> Left $ "Could not parse: " ++ x
     where
-      opts = [readMay x, readMay $ "\"" ++ x ++ "\""]
+      opts = [readMay x]
 
 
   kwargFormat :: KwargFormat a
@@ -64,7 +68,13 @@ class KwargsRead a where
   
 instance KwargsRead Int
 
-instance KwargsRead String
+instance KwargsRead String where
+  readKwarg "\"\"" = Right ""
+  readKwarg ""= Left "No input."
+  readKwarg x =
+    case filter isJust [readMay $ "\"" ++ x ++ "\"", readMay x] of
+      [] -> Left $ "Could not parse: " ++ x
+      Just v:_ -> Right v
 
 instance KwargsRead x => KwargsRead (Maybe x) where
 
@@ -98,22 +108,30 @@ instance (KwargsRead a) => GKwargsParser (K1 i a m) where
     case readKwarg x of
       Left e -> Left e
       Right v -> Right (K1 v)
-  format =  [kwargFormatConv (kwargFormat :: KwargFormat a)]
+  format =  [KwargFormat{constrName="", kwargType=Mandatory}]
 
 instance (KwargsRead a, KwargsRead b) => GKwargsParser (K1 i (a,b) m) where
   readVal (v:w:_) =
-    case (readKwarg v, readKwarg $ trace (show $ v:w:[]) w) of
+    case (readKwarg v, readKwarg w) of
       (Right x, Right y) -> Right $ K1 (x,y)
       (Left e1, Left e2) -> Left (e1 ++ e2)
-  format = [kwargFormatConv $ Comp (kwargFormat :: KwargFormat a) (kwargFormat :: KwargFormat b)]
-            
+      (Left e, _) -> Left e
+      (_, Left e) -> Left e
+  format = [unsafeCoerce $ Comp (kwargFormat :: KwargFormat a) (kwargFormat :: KwargFormat b)]
+
+instance (KwargsRead a, KwargsRead b) => GKwargsParser (K1 i (Maybe (a,b)) m) where
+  readVal (v:w:_) =
+    case (readKwarg v, readKwarg $ trace ("Opt: " ++ (show $ v:w:[])) w) of
+      (Right (x :: a), Right (y :: b)) -> Right $ K1 $ Just (x,y)
+      _ -> Right $ K1 Nothing
+  format = [mkOpt $ unsafeCoerce $ kwargFormatConv $ Comp (kwargFormat :: KwargFormat a) (kwargFormat :: KwargFormat b)]
 
 instance (GKwargsParser (f x), Selector s, GKwargsParser (g x))
          => GKwargsParser (((M1 S s f) :*: g) x) where
 
   readVal (x:xs) = (:*:) <$> readVal [x] <*> readVal xs
-  format = map kwargFormatConv (format :: [KwargFormat (M1 S s f x)])
-           ++ map kwargFormatConv (format :: [KwargFormat (g x)])
+  format = map (kwargFormatConv) (format :: [KwargFormat (M1 S s f x)])
+           ++ map (kwargFormatConv) (format :: [KwargFormat (g x)])
 
 
 instance (GKwargsParser (f p), Selector c) => GKwargsParser (M1 S c f p) where
