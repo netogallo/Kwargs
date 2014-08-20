@@ -16,7 +16,7 @@ data Config = Config{
     o3 :: Maybe String, -- Same as option1 but it is set to Nothing when --o3 is not present
     o4a_o4b :: Maybe (String, String)  -- It is set to Nothing when neither flag is present, 
                                        -- set to the value 'Just (val1,val2) when --o4a=val1 and --o4b=val2 is present
-				       -- Fails if only one of the two flags is present
+                                       -- Fails if only one of the two flags is present
 } deriving (Generic, Show)
 ```
 
@@ -26,7 +26,7 @@ data Config = Config{
    import System.Console.CmdArgs.Generic (kwargs, getBuilders)
    import Control.Applicative ((<$>)) -- For syntactic convenience
 
-   main = kwargs (getBuilders :: BaseBuilder Config) <$> getArgs >>= print
+   main = (kwargs (getBuilders :: BaseBuilder Config) <$> getArgs) >>= print
 ```
 
 3) Assuming that the code from step 2 is compiled into an executable called 'args':
