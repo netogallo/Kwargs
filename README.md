@@ -1,8 +1,8 @@
-== Kwargs ==
+## Kwargs
 
 This is a packet that provides a very easy way to create command line argument parsers using convention over configuration. It does not intend to replace packages like **cmdargs** but it's scope is quick prototyping of applications. If you are, for example, in the early development of an application, Kwargs allows you to easily create a command line argument parser which you can later replace with something more powerful like cmdargs. With all honesty, I wrote this to improve the quality of homework assignments w/o having to do much.
 
-=== Usage ===
+### Usage
 
 1) Define your settings type, which derives from generic. Make sure the 'DeriveGeneric' compiler flag is turned on:
 

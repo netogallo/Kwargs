@@ -10,8 +10,6 @@ module System.Console.CmdArgs.Generic.Parsing where
 
 import GHC.Generics
 import Control.Applicative
-import System.IO.Unsafe (unsafePerformIO)
-import Control.Exception (SomeException, try)
 import Safe (readMay)
 import Data.Maybe (isJust)
 import Unsafe.Coerce (unsafeCoerce)
@@ -134,13 +132,20 @@ instance (KwargsRead a) => GKwargsParser (K1 i a m) where
   format =  [KwargFormat{constrName="", kwargType=Mandatory}]
 
 instance (KwargsRead a, KwargsRead b) => GKwargsParser (K1 i (a,b) m) where
-  readVal (v:w:_) =
+  readVal (v:w:_) = 
     case (readKwarg v, readKwarg w) of
       (Right x, Right y) -> Right $ K1 (x,y)
       (Left e1, Left e2) -> Left (e1 ++ e2)
       (Left e, _) -> Left e
       (_, Left e) -> Left e
   format = [unsafeCoerce $ Comp (kwargFormat :: KwargFormat a) (kwargFormat :: KwargFormat b)]
+
+instance (KwargsRead a) => GKwargsParser (K1 i (Maybe a) m) where
+  readVal (v:_) =
+    case (readKwarg v) of
+      Right (x :: a) -> Right $ K1 $ Just x
+      _ -> Right $ K1 Nothing
+  format = [mkOpt $ kwargFormatConv (kwargFormat :: KwargFormat a)]
 
 
 -- | Instance to handle optional tuples. This means that whenever
